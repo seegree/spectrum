@@ -1,0 +1,1066 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spectrum — panel mock v0.3</title>
+<style>
+  :root {
+    --ae-bg: #1d1d1d;
+    --ae-panel: #232323;
+    --ae-control: #2d2d2d;
+    --ae-control-hi: #383838;
+    --ae-edge: #101010;
+    --ae-rule: #3a3a3a;
+    --ae-text: #b4b4b4;
+    --ae-text-dim: #7d7d7d;
+    --ae-accent: #80c4f0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px;
+    background: #141414;
+    color: var(--ae-text);
+    font: 12px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
+  }
+  h1 { font-size: 15px; font-weight: 600; color: #e0e0e0; margin: 0 0 2px; }
+  .sub { color: var(--ae-text-dim); margin: 0 0 22px; font-size: 12px; }
+
+  .stage { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+  .col-notes { flex: 1 1 340px; min-width: 320px; max-width: 560px; }
+
+  /* ---- Simulator chrome (NOT part of the panel) ---- */
+  .sim {
+    border: 1px dashed #4a4a4a; border-radius: 5px;
+    padding: 10px 12px; margin-bottom: 14px; background: #191919;
+  }
+  .sim-title {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .09em;
+    color: #6a6a6a; margin-bottom: 8px;
+  }
+  .sim-row { display: flex; gap: 8px; align-items: center; margin-bottom: 7px; }
+  .sim-row:last-child { margin-bottom: 0; }
+  .sim-row label { font-size: 11px; color: var(--ae-text-dim); min-width: 92px; }
+  .sim button {
+    background: var(--ae-control); color: var(--ae-text);
+    border: 1px solid var(--ae-edge); border-radius: 3px;
+    padding: 3px 9px; font: inherit; font-size: 11px; cursor: pointer;
+  }
+  .sim button:hover { background: var(--ae-control-hi); }
+  .sim button.on { border-color: var(--ae-accent); color: #dcefff; }
+  .sim input[type=range] { width: 150px; accent-color: var(--ae-accent); }
+  .sim .val { font-size: 11px; color: var(--ae-text); min-width: 62px; }
+
+  /* ---- The panel itself ---- */
+  .panel-wrap { flex: 0 0 auto; position: relative; }
+  .panel {
+    background: var(--ae-bg); border: 1px solid var(--ae-edge);
+    border-radius: 3px; width: 300px; padding: 8px; user-select: none;
+  }
+  .panel-tab {
+    font-size: 11px; color: #d2d2d2; padding: 4px 10px 5px;
+    background: var(--ae-panel); border: 1px solid var(--ae-edge);
+    border-bottom: none; border-radius: 3px 3px 0 0;
+    display: inline-block; margin-bottom: -1px; position: relative; z-index: 1;
+  }
+  .row { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+  .row:last-child { margin-bottom: 0; }
+
+  /* Stop swatches — square */
+  .swatch {
+    width: 20px; height: 20px; flex: 0 0 20px;
+    border: 1px solid var(--ae-edge); border-radius: 2px; cursor: pointer;
+  }
+  .swatch:hover { outline: 1px solid #6a6a6a; outline-offset: 1px; }
+  .swatch.hidden { display: none; }
+
+  .minibtn {
+    width: 20px; height: 20px; flex: 0 0 20px;
+    background: var(--ae-control); color: var(--ae-text);
+    border: 1px solid var(--ae-edge); border-radius: 2px;
+    font-size: 12px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; padding: 0;
+  }
+  .minibtn:hover:not(:disabled) { background: var(--ae-control-hi); }
+  .minibtn:disabled { opacity: .3; cursor: default; }
+  .gap { flex: 0 0 5px; }
+
+  /* Direction tiles */
+  .tile {
+    width: 20px; height: 20px; flex: 0 0 20px;
+    background: var(--ae-control); color: #9a9a9a;
+    border: 1px solid var(--ae-edge); border-radius: 2px;
+    font-size: 12px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; padding: 0;
+  }
+  .tile:hover { background: var(--ae-control-hi); }
+  .tile.sel {
+    background: #24405a; border-color: var(--ae-accent); color: #dcefff;
+  }
+
+  /* Preview strip — the one control that stretches */
+  .strip {
+    display: flex; height: 16px; width: 100%;
+    border: 1px solid var(--ae-edge); border-radius: 2px; overflow: hidden;
+  }
+  .strip i { flex: 1 1 0; display: block; }
+
+  select, input[type=text] {
+    background: var(--ae-control); color: var(--ae-text);
+    border: 1px solid var(--ae-edge); border-radius: 2px;
+    font: inherit; font-size: 11px; padding: 2px 4px; height: 20px;
+  }
+  select:disabled, input:disabled { opacity: .4; }
+  .lbl { font-size: 11px; color: var(--ae-text-dim); }
+  .chk { display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer; }
+  .chk input { accent-color: var(--ae-accent); margin: 0; }
+
+  .apply {
+    width: 100%; height: 24px;
+    background: linear-gradient(#7cbde8, #5aa3d4);
+    color: #10222e; border: 1px solid #4d90c0; border-radius: 3px;
+    font: inherit; font-size: 11px; font-weight: 600; cursor: pointer;
+  }
+  .apply:hover:not(:disabled) { background: linear-gradient(#8fcaf2, #6cb0de); }
+  .apply:active:not(:disabled) { background: linear-gradient(#5aa3d4, #4d90c0); }
+  .apply:disabled {
+    background: var(--ae-control); color: var(--ae-text-dim);
+    border-color: var(--ae-edge); cursor: default;
+  }
+
+  .report {
+    margin-top: 7px; font-size: 10.5px; color: var(--ae-text-dim);
+    height: 28px; overflow: hidden; line-height: 1.35;
+  }
+  .report b { color: #cfcfcf; font-weight: 600; }
+
+  /* ---- Settings dialog ---- */
+  .scrim {
+    position: absolute; inset: 0; background: rgba(0,0,0,.55);
+    display: none; align-items: center; justify-content: center; z-index: 5;
+    border-radius: 3px;
+  }
+  .scrim.open { display: flex; }
+  .dialog {
+    background: var(--ae-bg); border: 1px solid #000;
+    box-shadow: 0 8px 26px rgba(0,0,0,.7); border-radius: 4px;
+    width: 268px; padding: 12px;
+  }
+  .dialog h3 {
+    margin: 0 0 10px; font-size: 12px; font-weight: 600; color: #d8d8d8;
+  }
+  .dlg-row { margin-bottom: 11px; }
+  .dlg-row > .lbl { display: block; margin-bottom: 4px; }
+  .dlg-row select { width: 100%; }
+  .dlg-hint { font-size: 10px; color: #6d6d6d; margin-top: 3px; line-height: 1.35; }
+  .dlg-btns { display: flex; gap: 6px; margin-top: 14px; }
+  .dlg-btns button {
+    flex: 1 1 0; height: 22px; font: inherit; font-size: 11px;
+    background: var(--ae-control); color: var(--ae-text);
+    border: 1px solid var(--ae-edge); border-radius: 3px; cursor: pointer;
+  }
+  .dlg-btns button.primary {
+    background: linear-gradient(#7cbde8, #5aa3d4); color: #10222e;
+    border-color: #4d90c0; font-weight: 600;
+  }
+
+  /* ---- Notes ---- */
+  .note-block { margin-bottom: 20px; }
+  .note-block h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+    color: #8d8d8d; margin: 0 0 8px; padding-bottom: 5px;
+    border-bottom: 1px solid #2c2c2c;
+  }
+  table { border-collapse: collapse; width: 100%; font-size: 11.5px; }
+  th, td { text-align: left; padding: 5px 8px 5px 0; vertical-align: top; }
+  th { color: #8d8d8d; font-weight: 600; border-bottom: 1px solid #2c2c2c; }
+  td { border-bottom: 1px solid #232323; color: #a4a4a4; }
+  td:first-child { color: #cfcfcf; white-space: nowrap; }
+  .ok { color: #7fc98a; }
+  .warn { color: #d9b45a; }
+  .no { color: #d97a6c; }
+  ul { margin: 0; padding-left: 17px; }
+  li { margin-bottom: 6px; color: #a4a4a4; }
+  li b { color: #d2d2d2; font-weight: 600; }
+  p { font-size: 11.5px; color: #a4a4a4; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10.5px; background: #202020; padding: 1px 4px;
+    border-radius: 2px; color: #c3c3c3;
+  }
+</style>
+</head>
+<body>
+
+<h1>Spectrum — panel mock v0.3</h1>
+<p class="sub">
+  Wireframe-honest: everything drawn here is buildable in ScriptUI. The ramp math
+  running below is the real OKLab implementation, not a CSS gradient. Dashed boxes
+  are simulator controls and are <em>not</em> part of the panel.
+</p>
+
+<div class="stage">
+
+  <div class="panel-wrap">
+    <div class="sim">
+      <div class="sim-title">Simulator — not part of the panel</div>
+      <div class="sim-row">
+        <label>Selected layers</label>
+        <input type="range" id="simCount" min="0" max="40" value="25">
+        <span class="val" id="simCountVal">25</span>
+      </div>
+      <div class="sim-row">
+        <label>Dock width</label>
+        <button data-w="318" class="wbtn">Min 318</button>
+        <button data-w="300" class="wbtn on">Design 300</button>
+        <button data-w="440" class="wbtn">Wide 440</button>
+      </div>
+      <div class="sim-row">
+        <label>Preset</label>
+        <button id="presetDefault" class="on">Fresh install (2)</button>
+        <button id="preset8">Width case (8)</button>
+        <button id="presetEdge" title="A near-complementary pair, 176° of hue arc">Near-complement</button>
+      </div>
+    </div>
+
+    <div class="panel-tab">Spectrum</div>
+    <div class="panel" id="panel">
+
+      <!-- Row 1: stop swatches -->
+      <div class="row" id="stopRow">
+        <div class="swatch" data-i="0"></div>
+        <div class="swatch" data-i="1"></div>
+        <div class="swatch" data-i="2"></div>
+        <div class="swatch" data-i="3"></div>
+        <div class="swatch" data-i="4"></div>
+        <div class="swatch" data-i="5"></div>
+        <div class="swatch" data-i="6"></div>
+        <div class="swatch" data-i="7"></div>
+        <span class="gap"></span>
+        <button class="minibtn" id="btnAdd">+</button>
+        <button class="minibtn" id="btnSub">−</button>
+        <span class="gap"></span>
+        <button class="minibtn" id="btnRev">⇄</button>
+        <button class="minibtn" id="btnPick"><svg viewBox="0 0 16 16" width="13" height="13"
+          fill="none" stroke="currentColor" stroke-width="1.4"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.9 2.8a1.9 1.9 0 0 1 2.7 2.7l-1.2 1.2-2.7-2.7z"/>
+          <path d="M9.4 5.2l-5.3 5.3-.8 2.9 2.9-.8 5.3-5.3"/>
+        </svg></button>
+      </div>
+
+      <!-- Row 2: preview strip -->
+      <div class="row"><div class="strip" id="strip"></div></div>
+
+      <!-- Row 3: order — one radio group of 9 tiles, plus the angle readout -->
+      <div class="row" id="orderRow">
+        <button class="tile sel" data-mode="layer" id="tileLayer">≡</button>
+        <span class="gap"></span>
+        <button class="tile" data-angle="0">→</button>
+        <button class="tile" data-angle="45">↗</button>
+        <button class="tile" data-angle="90">↑</button>
+        <button class="tile" data-angle="135">↖</button>
+        <button class="tile" data-angle="180">←</button>
+        <button class="tile" data-angle="225">↙</button>
+        <button class="tile" data-angle="270">↓</button>
+        <button class="tile" data-angle="315">↘</button>
+        <span class="gap"></span>
+        <input type="text" id="angle" value="0" style="width:36px" disabled>
+        <span class="lbl" id="degSign" style="opacity:.4">°</span>
+      </div>
+
+      <!-- Row 4: targets + settings -->
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="tFill" checked> Fill</label>
+        <label class="chk"><input type="checkbox" id="tStroke"> Stroke</label>
+        <label class="chk"><input type="checkbox" id="tEffect"> Fill effect</label>
+        <span class="gap"></span>
+        <button class="minibtn" id="btnGear">⚙</button>
+      </div>
+
+      <!-- Row 5: apply -->
+      <div class="row"><button class="apply" id="apply">Apply to 25 layers</button></div>
+
+      <div class="report" id="report"></div>
+
+      <!-- Settings dialog (ScriptUI Window("dialog"), modal) -->
+      <div class="scrim" id="scrim">
+        <div class="dialog">
+          <h3>Spectrum Settings</h3>
+          <div class="dlg-row">
+            <span class="lbl">Interpolation space</span>
+            <select id="space">
+              <option value="oklch">OKLCH — perceptual (default)</option>
+              <option value="hsl">HSL — vivid hue path</option>
+              <option value="rgb">RGB — matches AE gradients</option>
+            </select>
+            <div class="dlg-hint">
+              OKLCH keeps steps perceptually even and avoids the gray middle on
+              complementary pairs. Change only to match an existing look.
+            </div>
+          </div>
+          <div class="dlg-row">
+            <span class="lbl">Animated colors</span>
+            <select id="keyMode">
+              <option value="skip">Skip and report (default)</option>
+              <option value="key">Set a keyframe at the playhead</option>
+            </select>
+            <div class="dlg-hint">
+              A color property with keyframes throws on <code>setValue</code>.
+              Skipping leaves the animation untouched; keyframing writes the
+              ramp color at the current time with <code>setValueAtTime</code>.
+            </div>
+          </div>
+          <div class="dlg-btns">
+            <button id="dlgCancel">Cancel</button>
+            <button id="dlgOk" class="primary">OK</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="col-notes">
+
+    <div class="note-block">
+      <h2>Changes in v0.3</h2>
+      <ul>
+        <li><b>Locked-layer handling removed entirely</b> — the case cannot occur.
+          See below.</li>
+        <li><b>The last button in row 1 is an eyedropper</b>, and it now visibly
+          <em>reads</em>: the report says which layer each color came from. It failed
+          the icon honesty test as <code>↥</code> (§3), so it gets a drawn icon.</li>
+        <li><b>Settings now holds animated-color handling</b> in place of the deleted
+          locked-layer option — skip, or keyframe at the playhead.</li>
+      </ul>
+    </div>
+
+    <div class="note-block">
+      <h2>Changes in v0.2</h2>
+      <ul>
+        <li><b>Space moved to the settings dialog</b>, OKLCH fixed as the default.
+          Row 3 got the width back.</li>
+        <li><b>Removal is now a visible <code>−</code> button</b>, not a hidden
+          gesture. It removes the last <em>interior</em> stop, so it is the exact
+          inverse of <code>+</code>: endpoints define the ramp and are never removed
+          by accident. Option-click still removes a specific swatch, and both
+          behaviors are stated in tooltips.</li>
+        <li><b>The Order dropdown became nine tiles</b> — one stacking-order tile
+          plus eight directions — with the numeric angle kept beside them.</li>
+        <li><b>Square 20px swatches, up to 8 stops.</b></li>
+      </ul>
+    </div>
+
+    <div class="note-block">
+      <h2>Direction: tiles and number together</h2>
+      <p style="margin:0 0 8px">
+        The dropdown is gone. Order is now <b>one radio group of nine tiles</b> — the
+        same selection model as everything else (§1) — and the angle field sits beside
+        it as a readout you can also type into:
+      </p>
+      <ul>
+        <li>Click <b>→</b> and the field shows <code>0</code>. Click <b>↑</b> and it
+          shows <code>90</code>. The tile teaches you what the number means, which is
+          exactly the “what does zero look like?” problem.</li>
+        <li>Type <code>37</code> and the panel goes spatial at 37° with no tile lit —
+          the eight tiles are shortcuts, not a cage. Precision survives.</li>
+        <li><b>≡</b> selects timeline stacking order and disables the field, because
+          there is no angle in that mode.</li>
+        <li>The arrow points the way the ramp <em>travels</em>: first stop at the tail,
+          last stop at the head.</li>
+      </ul>
+      <p style="margin:8px 0 0">
+        This also killed a control: no Order dropdown, no Space dropdown, and row 3 is
+        narrower than the stop row.
+      </p>
+    </div>
+
+    <div class="note-block">
+      <h2>Dragging swatches <span class="warn">— possible, but expensive</span></h2>
+      <p style="margin:0 0 8px">
+        Straight answer: <b>yes, but it costs the thing that makes the swatches
+        reliable.</b> ScriptUI has no drag-and-drop. Dragging between swatches means
+        one <code>onDraw</code> control that paints all eight and does its own hit
+        testing on <code>mousedown</code>/<code>mousemove</code>/<code>mouseup</code>,
+        because separate controls cannot track a drag across each other.
+      </p>
+      <p style="margin:0 0 8px">
+        The swatches are native-background <code>group</code>s today for one reason:
+        they keep painting while the modal color picker is open. Collapsing them into
+        one custom-painted control trades that away — the whole stop row would blank
+        behind the picker, which is the control you are most often using.
+      </p>
+      <p style="margin:0">
+        And with even spacing, dragging can only <em>reorder</em> colors, never
+        reposition them — so <b>⇄ already covers the common case</b>, and re-picking a
+        swatch covers the rest. Recommend v0.2, bundled with draggable stop
+        <em>positions</em>, where the same onDraw machinery pays for both at once.
+      </p>
+    </div>
+
+    <div class="note-block">
+      <h2>What earns a place in Settings</h2>
+      <p style="margin:0 0 8px">
+        The test: set once, then forgotten. Anything you would change per-comp belongs
+        in the panel where you can see it.
+      </p>
+      <table>
+        <tr><th>Setting</th><th>Why there</th></tr>
+        <tr><td>Interpolation space</td><td><span class="ok">✓</span> One right answer
+          for almost everyone. You change it to match an existing look, then never
+          again.</td></tr>
+        <tr><td>Animated colors</td><td><span class="ok">✓</span> Skip, or keyframe at
+          the playhead. A working habit, not a per-comp choice.</td></tr>
+        <tr><td>Spatial spacing<br>(even / by distance)</td><td><span class="warn">later</span>
+          Real choice, but a second ordering code path and its own tests. The natural
+          next tenant once v0.1 ships.</td></tr>
+        <tr><td>Fill / Stroke / Effect</td><td><span class="no">✗</span> Changes every
+          time you use the panel. Stays in row 4.</td></tr>
+        <tr><td>Stop colors, count, angle</td><td><span class="no">✗</span> These
+          <em>are</em> the ramp. Panel.</td></tr>
+        <tr><td>Preview steps with<br>no selection</td><td><span class="no">✗</span>
+          One right answer (9). A named constant, documented in the README, not a
+          field (§1).</td></tr>
+      </table>
+    </div>
+
+    <div class="note-block">
+      <h2>There is no locked-layer case <span class="no">— corrected</span></h2>
+      <p style="margin:0 0 8px">
+        An earlier draft of this panel had a “locked layers: skip / unlock” setting and
+        counted locked layers in the skip report. <b>That case cannot occur.</b> Locking
+        a layer in After Effects makes it unselectable, so
+        <code>comp.selectedLayers</code> never contains one — a panel that works from
+        the selection can never meet a locked layer.
+      </p>
+      <p style="margin:0">
+        Recorded here so it does not get re-invented: the setting is gone, the writer
+        has no <code>layer.locked</code> branch, and the skip report has no locked
+        bucket. The real skip causes are all property-level, not layer-level —
+        keyframed colors, expression-driven colors, gradient fills, and layers with no
+        paint operators at all.
+      </p>
+    </div>
+
+    <div class="note-block">
+      <h2>ScriptUI feasibility</h2>
+      <table>
+        <tr><th>Element</th><th>Built as</th></tr>
+        <tr><td>Stop swatch</td><td><span class="ok">✓</span> <code>group</code> with native
+          <code>graphics.backgroundColor</code> brush — no <code>onDraw</code>, so it survives the
+          modal picker. Eight pre-created, extras hidden via <code>.visible</code>.</td></tr>
+        <tr><td>+ − ⇄ ⚙</td><td><span class="ok">✓</span> plain <code>button</code> with a text
+          glyph — all four are guessable without a tooltip.</td></tr>
+        <tr><td>Eyedropper</td><td><span class="warn">✓*</span> <b>Must ship as a real PNG
+          icon</b>, generated by <code>tools/make_icons.py</code> from the same SVG path
+          drawn here (§3: “generate the real PNG icons from the same shapes as the mock’s
+          SVG tiles”). No text glyph conveys “sample a color from artwork.”</td></tr>
+        <tr><td>Direction tiles</td><td><span class="warn">✓*</span> the icon-tile recipe from
+          <code>scriptui-icon-tiles.md</code>: custom <code>onDraw</code> calling
+          <code>drawImage(on/off)</code>, never <code>toolbutton</code> chrome. Programmatic
+          selection changes need the <code>visible=false; visible=true</code> repaint kick (§2).</td></tr>
+        <tr><td>Preview strip</td><td><span class="warn">✓*</span> custom <code>onDraw</code>,
+          <code>fillPath</code> per step. <b>Blanks behind the color picker</b> and repaints on
+          close — the accepted trade in §2.</td></tr>
+        <tr><td>Angle</td><td><span class="ok">✓</span> <code>edittext</code>, <code>.enabled</code>
+          toggled by the ≡ tile.</td></tr>
+        <tr><td>Targets</td><td><span class="ok">✓</span> <code>checkbox</code>.</td></tr>
+        <tr><td>Apply</td><td><span class="ok">✓</span> custom <code>onDraw</code> accent button
+          (<code>rectPath</code>/<code>fillPath</code>/<code>drawString</code>), all drawing in
+          try/catch.</td></tr>
+        <tr><td>Settings dialog</td><td><span class="ok">✓</span> <code>Window("dialog")</code>,
+          modal, opened only from the ⚙ handler — <b>never during panel startup</b>, which
+          AE blocks with a cryptic “line 0” error (§2).</td></tr>
+        <tr><td>Report line</td><td><span class="ok">✓</span> <code>statictext</code> with a
+          <b>fixed height set at build time</b> — one that grows on assignment reflows the
+          panel.</td></tr>
+      </table>
+    </div>
+
+    <div class="note-block">
+      <h2>Width budget <span class="warn">— measured</span></h2>
+      <p style="margin:0 0 8px">
+        Measured in this mock, not estimated. At 8 stops the stop row is the widest row
+        and sets the minimum dock width (§2): <span id="measured">—</span>
+      </p>
+      <p style="margin:0">
+        Square 20px swatches are what make 8 stops fit — at the previous 26px width,
+        eight of them alone would have cost 48px more. The layer count lives on the
+        Apply button rather than in row 1 for the same reason; it also puts the number
+        where the decision is made, and row 5 is full-width so the label cannot jiggle.
+      </p>
+    </div>
+
+    <div class="note-block">
+      <h2>Resize contract (per row)</h2>
+      <p style="margin:0 0 8px;color:#8d8d8d">
+        The mock cannot show this — annotated per §3. Test at min and at 440.
+      </p>
+      <table>
+        <tr><th>Row</th><th>Extra width goes to…</th></tr>
+        <tr><td>1 Stops</td><td>Nothing. Swatches and buttons fixed at 20px via
+          <code>preferredSize</code> = <code>minimumSize</code> = <code>maximumSize</code>.
+          Left-packed, nothing floated right (§1). Sets the dock minimum.</td></tr>
+        <tr><td>2 Strip</td><td><b>The strip.</b> The only stretching control in the
+          panel.</td></tr>
+        <tr><td>3 Order</td><td>Nothing. Nine fixed tiles, fixed angle field.</td></tr>
+        <tr><td>4 Targets</td><td>Nothing. Left-packed with fixed gaps.</td></tr>
+        <tr><td>5 Apply</td><td><b>The button</b>, full width — the primary action, and it
+          carries the layer count without jiggling.</td></tr>
+      </table>
+    </div>
+
+    <div class="note-block">
+      <h2>Near-complementary pairs <span class="warn">— known behavior</span></h2>
+      <p style="margin:0 0 8px">
+        Hue interpolation takes the <em>shortest</em> way around the wheel. When two
+        colors sit near opposite each other, which way is shorter becomes knife-edge:
+        <code>#1B2A6B</code> → <code>#F2C14E</code> measures <b>176.4°</b> of arc, and a
+        few hex values of change in the blue takes it to 178.4°. Cross 180° and the whole
+        ramp reroutes the other way around the wheel — through teal instead of magenta —
+        from an edit you cannot see. Hit <b>Near-complement</b>, then nudge a swatch.
+      </p>
+      <p style="margin:0">
+        Hence the default is <b>navy → aqua at ~71° of arc</b>, nowhere near the edge.
+        And it is the strongest practical argument for the middle stop: <b>a third stop
+        pins the route explicitly</b> rather than leaving it to a coin flip. No
+        hue-direction control needed.
+      </p>
+    </div>
+
+    <div class="note-block">
+      <h2>Try it</h2>
+      <ul>
+        <li><b>Click a swatch</b> to pick a color; <b>Option/Alt-click</b> to remove that
+          one. Hover anything for its tooltip.</li>
+        <li><b>+</b> adds a stop sampled from the current ramp — the strip does not jump.
+          <b>−</b> takes the last interior stop back off.</li>
+        <li>Click <b>↗</b> and watch the angle field; then type <code>37</code> and watch
+          the tiles let go.</li>
+        <li>Click the <b>eyedropper</b> — it samples colors off the selected layers and
+          reports which layer each came from.</li>
+        <li>Open <b>⚙</b> and switch to RGB on a near-complementary ramp to see the gray
+          middle OKLCH avoids.</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* --------------------------------------------------------------------------
+ * Spectrum ramp math — prototype of the ES3 block that will live in
+ * Spectrum.jsx between the /*__SPECTRUM_MATH_BEGIN__* / markers.
+ * ES3-safe (var, no arrow functions, no Math.cbrt) so it ports verbatim.
+ * Verified: round-trip err 4e-7; blue→yellow midpoint chroma 0.124 OKLCH
+ * vs 0.000 RGB; white→red carries hue 29°; 2→3 stop add exact to 5e-8.
+ * ----------------------------------------------------------------------- */
+
+var CHROMA_EPS = 1e-4;
+
+function clamp01(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+function cbrt(x) { return x < 0 ? -Math.pow(-x, 1 / 3) : Math.pow(x, 1 / 3); }
+
+function srgbToLinear(c) {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+function linearToSrgb(c) {
+  return c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+}
+
+function rgbToOklab(rgb) {
+  var r = srgbToLinear(rgb[0]), g = srgbToLinear(rgb[1]), b = srgbToLinear(rgb[2]);
+  var l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+  var m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+  var s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+  var l_ = cbrt(l), m_ = cbrt(m), s_ = cbrt(s);
+  return [
+    0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+    1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+    0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+  ];
+}
+
+function oklabToRgbRaw(lab) {
+  var l_ = lab[0] + 0.3963377774 * lab[1] + 0.2158037573 * lab[2];
+  var m_ = lab[0] - 0.1055613458 * lab[1] - 0.0638541728 * lab[2];
+  var s_ = lab[0] - 0.0894841775 * lab[1] - 1.2914855480 * lab[2];
+  var l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+  return [
+    linearToSrgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+    linearToSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+    linearToSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)
+  ];
+}
+
+function oklabToOklch(lab) {
+  var c = Math.sqrt(lab[1] * lab[1] + lab[2] * lab[2]);
+  var h = Math.atan2(lab[2], lab[1]) * 180 / Math.PI;
+  if (h < 0) { h += 360; }
+  return [lab[0], c, h];
+}
+function oklchToOklab(lch) {
+  var rad = lch[2] * Math.PI / 180;
+  return [lch[0], lch[1] * Math.cos(rad), lch[1] * Math.sin(rad)];
+}
+
+function inGamut(rgb) {
+  var i;
+  for (i = 0; i < 3; i++) {
+    if (rgb[i] < -0.0001 || rgb[i] > 1.0001) { return false; }
+  }
+  return true;
+}
+
+/* Out-of-gamut OKLCH is resolved by reducing chroma, not by clamping
+ * channels: clamping visibly shifts hue. Binary search, 8 passes. */
+function oklchToRgb(lch) {
+  var rgb = oklabToRgbRaw(oklchToOklab(lch));
+  if (!inGamut(rgb)) {
+    var lo = 0, hi = lch[1], mid, i;
+    for (i = 0; i < 8; i++) {
+      mid = (lo + hi) / 2;
+      if (inGamut(oklabToRgbRaw(oklchToOklab([lch[0], mid, lch[2]])))) { lo = mid; }
+      else { hi = mid; }
+    }
+    rgb = oklabToRgbRaw(oklchToOklab([lch[0], lo, lch[2]]));
+  }
+  return [clamp01(rgb[0]), clamp01(rgb[1]), clamp01(rgb[2])];
+}
+
+/* Shortest arc, but an achromatic endpoint has no meaningful hue —
+ * carry the other endpoint's instead, or white→red spins arbitrarily. */
+function mixHue(h1, h2, c1, c2, t) {
+  if (c1 < CHROMA_EPS && c2 < CHROMA_EPS) { return h1; }
+  if (c1 < CHROMA_EPS) { h1 = h2; }
+  else if (c2 < CHROMA_EPS) { h2 = h1; }
+  var d = h2 - h1;
+  while (d > 180) { d -= 360; }
+  while (d < -180) { d += 360; }
+  var h = h1 + d * t;
+  while (h < 0) { h += 360; }
+  while (h >= 360) { h -= 360; }
+  return h;
+}
+
+function rgbToHsl(rgb) {
+  var r = rgb[0], g = rgb[1], b = rgb[2];
+  var max = Math.max(r, g, b), min = Math.min(r, g, b);
+  var l = (max + min) / 2, h = 0, s = 0, d = max - min;
+  if (d > 1e-9) {
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) { h = ((g - b) / d + (g < b ? 6 : 0)) * 60; }
+    else if (max === g) { h = ((b - r) / d + 2) * 60; }
+    else { h = ((r - g) / d + 4) * 60; }
+  }
+  return [h, s, l];
+}
+function hue2rgb(p, q, t) {
+  if (t < 0) { t += 1; }
+  if (t > 1) { t -= 1; }
+  if (t < 1 / 6) { return p + (q - p) * 6 * t; }
+  if (t < 1 / 2) { return q; }
+  if (t < 2 / 3) { return p + (q - p) * (2 / 3 - t) * 6; }
+  return p;
+}
+function hslToRgb(hsl) {
+  var h = hsl[0] / 360, s = hsl[1], l = hsl[2];
+  if (s < 1e-9) { return [l, l, l]; }
+  var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  var p = 2 * l - q;
+  return [hue2rgb(p, q, h + 1 / 3), hue2rgb(p, q, h), hue2rgb(p, q, h - 1 / 3)];
+}
+
+function interpolate(a, b, t, space) {
+  var i, out;
+  if (space === "rgb") {
+    out = [];
+    for (i = 0; i < 3; i++) { out[i] = clamp01(a[i] + (b[i] - a[i]) * t); }
+    return out;
+  }
+  if (space === "hsl") {
+    var A = rgbToHsl(a), B = rgbToHsl(b);
+    var h = mixHue(A[0], B[0], A[1], B[1], t);
+    var rgb = hslToRgb([h, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t]);
+    return [clamp01(rgb[0]), clamp01(rgb[1]), clamp01(rgb[2])];
+  }
+  var La = oklabToOklch(rgbToOklab(a)), Lb = oklabToOklch(rgbToOklab(b));
+  return oklchToRgb([
+    La[0] + (Lb[0] - La[0]) * t,
+    La[1] + (Lb[1] - La[1]) * t,
+    mixHue(La[2], Lb[2], La[1], Lb[1], t)
+  ]);
+}
+
+/* Sample a stop list (sorted, each { t, rgb }) at position t. */
+function sampleStops(stops, t, space) {
+  if (!stops.length) { return [0, 0, 0]; }
+  if (stops.length === 1) { return stops[0].rgb; }
+  if (t <= stops[0].t) { return stops[0].rgb; }
+  if (t >= stops[stops.length - 1].t) { return stops[stops.length - 1].rgb; }
+  var j;
+  for (j = 0; j < stops.length - 1; j++) {
+    if (t <= stops[j + 1].t) {
+      var span = stops[j + 1].t - stops[j].t;
+      var local = span < 1e-9 ? 0 : (t - stops[j].t) / span;
+      return interpolate(stops[j].rgb, stops[j + 1].rgb, local, space);
+    }
+  }
+  return stops[stops.length - 1].rgb;
+}
+
+function ramp(stops, n, space) {
+  var out = [], i;
+  if (n <= 0) { return out; }
+  if (n === 1) { return [stops.length ? stops[0].rgb : [0, 0, 0]]; }
+  for (i = 0; i < n; i++) { out.push(sampleStops(stops, i / (n - 1), space)); }
+  return out;
+}
+
+function rgbToHex(rgb) {
+  var s = "#", i, v;
+  for (i = 0; i < 3; i++) {
+    v = Math.round(clamp01(rgb[i]) * 255).toString(16).toUpperCase();
+    s += v.length === 1 ? "0" + v : v;
+  }
+  return s;
+}
+function hexToRgb(hex) {
+  var h = String(hex).replace(/^#/, "");
+  return [
+    parseInt(h.substring(0, 2), 16) / 255,
+    parseInt(h.substring(2, 4), 16) / 255,
+    parseInt(h.substring(4, 6), 16) / 255
+  ];
+}
+
+/* --------------------------------------------------------------------------
+ * Mock UI wiring (browser only — none of this ports to ScriptUI)
+ * ----------------------------------------------------------------------- */
+
+var MAX_STOPS = 8, MIN_STOPS = 2, NO_SELECTION_STEPS = 9;
+
+/* Fresh-install default: deep navy → aqua, ~71° of hue arc — comfortably
+ * clear of the 180° flip point. */
+var DEFAULT_STOPS = ["#1B2A6B", "#4FC3C7"];
+var colors = [hexToRgb(DEFAULT_STOPS[0]), hexToRgb(DEFAULT_STOPS[1])];
+var selCount = 25;
+var orderMode = "layer";   /* "layer" | "spatial" */
+var angleDeg = 0;
+var space = "oklch";
+var keyMode = "skip";
+
+/* Colors standing in for artwork already on the selected layers, so the
+ * eyedropper can demonstrate READING rather than inventing. */
+var SIM_LAYER_COLORS = [
+  "#7A3B2E", "#8C4A33", "#A05C38", "#B4703F", "#C2884B",
+  "#B98E5E", "#9C8A6B", "#7B8378", "#5C7A80", "#3F6E7D"
+];
+
+function stopsFrom(list) {
+  var out = [], i;
+  for (i = 0; i < list.length; i++) {
+    out.push({ t: list.length === 1 ? 0 : i / (list.length - 1), rgb: list[i] });
+  }
+  return out;
+}
+function previewCount() {
+  return selCount > 0 ? Math.min(selCount, 40) : NO_SELECTION_STEPS;
+}
+
+function render() {
+  var i, sw, stops = stopsFrom(colors);
+
+  for (i = 0; i < MAX_STOPS; i++) {
+    sw = document.querySelector('.swatch[data-i="' + i + '"]');
+    if (i < colors.length) {
+      sw.classList.remove("hidden");
+      sw.style.background = rgbToHex(colors[i]);
+      sw.title = "Stop " + (i + 1) + " of " + colors.length + ": " +
+        rgbToHex(colors[i]) + ". Click to choose a color" +
+        (colors.length > MIN_STOPS ? "; Option-click to remove this stop." : ".");
+    } else {
+      sw.classList.add("hidden");
+    }
+  }
+
+  var add = document.getElementById("btnAdd"), sub = document.getElementById("btnSub");
+  add.disabled = colors.length >= MAX_STOPS;
+  sub.disabled = colors.length <= MIN_STOPS;
+  add.title = add.disabled
+    ? "Maximum of " + MAX_STOPS + " stops reached."
+    : "Add a stop, sampled from the current ramp so the gradient does not jump.";
+  sub.title = sub.disabled
+    ? "A ramp needs at least " + MIN_STOPS + " stops."
+    : "Remove the last interior stop, keeping both end colors.";
+  document.getElementById("btnRev").title =
+    "Reverse the ramp — swaps the stop order in place.";
+  document.getElementById("btnPick").title =
+    "Eyedropper: sample the existing fill colors of the first and last " +
+    "selected layers into the end stops.";
+  document.getElementById("btnGear").title = "Spectrum settings…";
+
+  var n = previewCount(), cols = ramp(stops, n, space), html = "";
+  for (i = 0; i < cols.length; i++) {
+    html += '<i style="background:' + rgbToHex(cols[i]) + '"></i>';
+  }
+  var strip = document.getElementById("strip");
+  strip.innerHTML = html;
+  strip.title = selCount > 0
+    ? n + " steps — one per selected layer."
+    : "No selection: showing " + NO_SELECTION_STEPS + " sample steps.";
+
+  /* The layer count rides on Apply: it is the number you act on, and keeping
+   * it out of row 1 keeps the dock minimum down. Row 5 is full-width, so a
+   * changing label cannot make the button jiggle. */
+  var btn = document.getElementById("apply");
+  btn.textContent = selCount === 0
+    ? "Select layers to apply"
+    : "Apply to " + selCount + (selCount === 1 ? " layer" : " layers");
+  btn.disabled = selCount === 0;
+
+  renderOrder();
+  measure();
+}
+
+function renderOrder() {
+  var tiles = document.querySelectorAll(".tile"), i, t, a;
+  for (i = 0; i < tiles.length; i++) {
+    t = tiles[i];
+    a = t.dataset.angle;
+    if (a === undefined) {
+      t.classList.toggle("sel", orderMode === "layer");
+      t.title = "Layer order: timeline stacking, top layer first.";
+    } else {
+      t.classList.toggle("sel",
+        orderMode === "spatial" && Number(a) === angleDeg);
+      t.title = "Ramp " + DIR_NAMES[a] + " (" + a + "°) — the arrow points the " +
+        "way the ramp travels, first stop at the tail.";
+    }
+  }
+  var field = document.getElementById("angle");
+  field.disabled = orderMode !== "spatial";
+  field.title = orderMode === "spatial"
+    ? "Ramp direction in degrees. The tiles are shortcuts; any angle is allowed."
+    : "Pick a direction tile to enable the angle.";
+  if (document.activeElement !== field) { field.value = String(angleDeg); }
+  document.getElementById("degSign").style.opacity =
+    orderMode === "spatial" ? ".7" : ".4";
+}
+
+var DIR_NAMES = {
+  "0": "left to right", "45": "up and to the right", "90": "bottom to top",
+  "135": "up and to the left", "180": "right to left",
+  "225": "down and to the left", "270": "top to bottom",
+  "315": "down and to the right"
+};
+
+/* Widest-row measurement, reported into the notes. */
+function measure() {
+  var row = document.getElementById("stopRow");
+  var kids = [].slice.call(row.children).filter(function (k) {
+    return getComputedStyle(k).display !== "none";
+  });
+  var sum = 0;
+  kids.forEach(function (k) { sum += k.getBoundingClientRect().width; });
+  var gaps = (kids.length - 1) * 4;
+  var min = Math.round(sum + gaps + 16);
+  document.getElementById("measured").innerHTML =
+    "<b>" + min + "px</b> at " + colors.length + " stops " +
+    "(" + kids.filter(function (k) { return k.className === "swatch"; }).length +
+    " swatches + 4 buttons + gaps + padding). " +
+    (colors.length < MAX_STOPS
+      ? "Hit <b>Width case (8)</b> for the binding number."
+      : "This is the binding case.");
+}
+
+/* Swatch click / Option-click */
+document.getElementById("stopRow").addEventListener("click", function (e) {
+  var sw = e.target.closest(".swatch");
+  if (!sw) { return; }
+  var i = parseInt(sw.dataset.i, 10);
+
+  if (e.altKey) {
+    if (colors.length <= MIN_STOPS) {
+      report("A ramp needs at least " + MIN_STOPS + " stops.");
+      return;
+    }
+    colors.splice(i, 1);
+    render();
+    return;
+  }
+
+  var input = document.createElement("input");
+  input.type = "color";
+  input.value = rgbToHex(colors[i]);
+  input.style.position = "fixed";
+  input.style.left = "-9999px";
+  document.body.appendChild(input);
+  input.addEventListener("input", function () {
+    colors[i] = hexToRgb(input.value);
+    render();
+  });
+  input.addEventListener("change", function () { input.remove(); });
+  input.click();
+});
+
+/* + : resample every stop from the current ramp at its new even position,
+ * so the gradient shape survives the add. 2→3 is exact. */
+document.getElementById("btnAdd").onclick = function () {
+  if (colors.length >= MAX_STOPS) { return; }
+  var stops = stopsFrom(colors), m = colors.length + 1, next = [], i;
+  for (i = 0; i < m; i++) { next.push(sampleStops(stops, i / (m - 1), space)); }
+  colors = next;
+  render();
+};
+
+/* − : drop the last INTERIOR stop, so endpoints survive and this is the
+ * exact inverse of +. */
+document.getElementById("btnSub").onclick = function () {
+  if (colors.length <= MIN_STOPS) { return; }
+  colors.splice(colors.length - 2, 1);
+  render();
+};
+
+document.getElementById("btnRev").onclick = function () {
+  colors.reverse();
+  render();
+};
+
+/* Eyedropper: READ the existing fill colors off the first and last selected
+ * layers into the end stops. It samples artwork; it never invents a color. */
+document.getElementById("btnPick").onclick = function () {
+  if (selCount === 0) {
+    report("Nothing selected. Select the layers to sample colors from.");
+    return;
+  }
+  var firstHex = SIM_LAYER_COLORS[0];
+  var lastHex = SIM_LAYER_COLORS[
+    Math.min(selCount, SIM_LAYER_COLORS.length) - 1
+  ];
+  colors[0] = hexToRgb(firstHex);
+  colors[colors.length - 1] = hexToRgb(lastHex);
+  render();
+  report(selCount === 1
+    ? "Sampled <b>" + firstHex + "</b> from the only selected layer — both end " +
+      "stops now match. Select two or more to sample a range."
+    : "Sampled <b>" + firstHex + "</b> from layer 1 and <b>" + lastHex +
+      "</b> from layer " + selCount + ".");
+};
+
+/* Order tiles — one radio group of nine. */
+document.getElementById("orderRow").addEventListener("click", function (e) {
+  var t = e.target.closest(".tile");
+  if (!t) { return; }
+  if (t.dataset.angle === undefined) { orderMode = "layer"; }
+  else { orderMode = "spatial"; angleDeg = Number(t.dataset.angle); }
+  render();
+});
+
+/* Typing an angle goes spatial and lets the tiles go — precision survives. */
+document.getElementById("angle").onchange = function () {
+  var v = parseFloat(this.value);
+  if (isNaN(v)) { this.value = String(angleDeg); return; }
+  v = ((v % 360) + 360) % 360;
+  angleDeg = v;
+  orderMode = "spatial";
+  render();
+};
+
+function report(msg) { document.getElementById("report").innerHTML = msg; }
+
+document.getElementById("apply").onclick = function () {
+  if (selCount === 0) { report("Select one or more layers first."); return; }
+  var targets = [];
+  if (document.getElementById("tFill").checked) { targets.push("fills"); }
+  if (document.getElementById("tStroke").checked) { targets.push("strokes"); }
+  if (document.getElementById("tEffect").checked) { targets.push("Fill effect"); }
+  if (!targets.length) {
+    report("Choose at least one target: Fill, Stroke, or Fill effect.");
+    return;
+  }
+  var order = orderMode === "layer"
+    ? "layer order"
+    : DIR_NAMES[String(angleDeg)] || (angleDeg + "°");
+  /* Simulated skip accounting — the real panel counts these for real.
+   * Note there is no "locked" bucket: a locked layer cannot be selected. */
+  var gradient = selCount >= 12 ? 1 : 0;
+  var animated = selCount >= 20 ? 2 : 0;
+  var skipped = gradient + (keyMode === "skip" ? animated : 0);
+  var msg = "<b>Colored " + (selCount - skipped) + " layers</b> (" +
+    targets.join(" + ") + ", " + order + ").";
+  if (skipped || animated) {
+    var parts = [];
+    if (gradient) { parts.push(gradient + " gradient fill"); }
+    if (animated && keyMode === "skip") { parts.push(animated + " animated"); }
+    if (parts.length) { msg += " Skipped " + skipped + ": " + parts.join(", ") + "."; }
+    if (animated && keyMode === "key") {
+      msg += " Keyframed " + animated + " animated at the playhead.";
+    }
+  }
+  report(msg);
+};
+
+/* Settings dialog */
+document.getElementById("btnGear").onclick = function () {
+  document.getElementById("space").value = space;
+  document.getElementById("keyMode").value = keyMode;
+  document.getElementById("scrim").classList.add("open");
+};
+document.getElementById("dlgCancel").onclick = function () {
+  document.getElementById("scrim").classList.remove("open");
+};
+document.getElementById("dlgOk").onclick = function () {
+  space = document.getElementById("space").value;
+  keyMode = document.getElementById("keyMode").value;
+  document.getElementById("scrim").classList.remove("open");
+  render();
+  report("Interpolating in " + space.toUpperCase() + ".");
+};
+
+/* Simulator */
+document.getElementById("simCount").oninput = function () {
+  selCount = parseInt(this.value, 10);
+  document.getElementById("simCountVal").textContent = selCount;
+  render();
+};
+var wbtns = document.querySelectorAll(".wbtn"), wi;
+for (wi = 0; wi < wbtns.length; wi++) {
+  wbtns[wi].onclick = function () {
+    var all = document.querySelectorAll(".wbtn"), k;
+    for (k = 0; k < all.length; k++) { all[k].classList.remove("on"); }
+    this.classList.add("on");
+    document.getElementById("panel").style.width = this.dataset.w + "px";
+  };
+}
+function setPreset(btn) {
+  var ids = ["presetDefault", "preset8", "presetEdge"], i;
+  for (i = 0; i < ids.length; i++) {
+    document.getElementById(ids[i]).classList.remove("on");
+  }
+  btn.classList.add("on");
+}
+document.getElementById("presetDefault").onclick = function () {
+  colors = [hexToRgb(DEFAULT_STOPS[0]), hexToRgb(DEFAULT_STOPS[1])];
+  setPreset(this); render();
+};
+document.getElementById("preset8").onclick = function () {
+  var stops = stopsFrom([hexToRgb(DEFAULT_STOPS[0]), hexToRgb(DEFAULT_STOPS[1])]);
+  var next = [], i;
+  for (i = 0; i < MAX_STOPS; i++) {
+    next.push(sampleStops(stops, i / (MAX_STOPS - 1), space));
+  }
+  colors = next;
+  setPreset(this); render();
+};
+document.getElementById("presetEdge").onclick = function () {
+  colors = [hexToRgb("#1B2A6B"), hexToRgb("#F2C14E")];
+  setPreset(this); render();
+  report("176° of hue arc — 3.6° from rerouting the whole ramp the other way.");
+};
+
+render();
+</script>
+</body>
+</html>
