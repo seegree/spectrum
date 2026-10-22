@@ -474,38 +474,74 @@
      * or the selection.
      * ------------------------------------------------------------------- */
 
-    /* Comp-space anchor for spatial ordering.
+    /* Comp-space position of a layer's anchor point, for spatial ordering.
      *
-     * layer.position.value is in PARENT space, so a parented or 3D layer
-     * lands in the wrong place. sourcePointToComp maps layer space to comp
-     * space honoring both. Its documented signature varies between AE
-     * versions, so try both forms before falling back — a wrong sort order
-     * is better than a thrown error, and the fallback is exact for the
-     * common case of unparented 2D layers. */
+     * `layer.position` is measured in the PARENT's coordinate space, so a
+     * parented layer's raw position says nothing about where it sits in the
+     * comp — order by it and a parented grid sorts scrambled.
+     *
+     * Expressions solve this with toWorld(). Scripting has no equivalent,
+     * and sourcePointToComp() is documented for layers with a footage
+     * source, so it is no help on a shape layer — which is exactly what
+     * this panel is usually pointed at. So compose the parent chain by
+     * hand: a layer's position IS its anchor point expressed in its
+     * parent's space, so mapping that point up through each ancestor in
+     * turn lands it in comp space.
+     *
+     * 3D caveat: X and Y rotation and Z depth are not composed, so a
+     * parent rotated out of plane sorts approximately. Translation, scale
+     * and Z rotation are exact, which covers 2D layouts completely. */
     function compAnchor(layer, comp) {
-        var p, anchor;
-        try { anchor = layer.anchorPoint.value; } catch (e) { anchor = [0, 0]; }
+        var t = 0, p, parent = null, guard = 0;
 
+        try { t = comp.time; } catch (timeError) { t = 0; }
+
+        p = valueAt(layer, "position", t, [0, 0, 0]);
+        try { parent = layer.parent; } catch (parentError) { parent = null; }
+
+        /* AE forbids parent cycles, but never loop on project data without
+         * a bound. */
+        while (parent && guard < 32) {
+            p = pointToParentSpace(parent, p, t);
+            try { parent = parent.parent; } catch (walkError) { parent = null; }
+            guard++;
+        }
+
+        return [p[0], p[1]];
+    }
+
+    function valueAt(layer, name, t, fallback) {
+        var prop = null, v;
+        try { prop = layer[name]; } catch (missing) { return fallback; }
+        if (!prop) { return fallback; }
         try {
-            p = layer.sourcePointToComp(anchor);
-            if (p && p.length >= 2 && isFinite(p[0]) && isFinite(p[1])) {
-                return [p[0], p[1]];
-            }
-        } catch (e1) {}
+            v = prop.valueAtTime(t, false);
+        } catch (timeError) {
+            try { v = prop.value; } catch (valueError) { return fallback; }
+        }
+        return (v === undefined || v === null) ? fallback : v;
+    }
 
-        try {
-            p = layer.sourcePointToComp(comp.time, anchor);
-            if (p && p.length >= 2 && isFinite(p[0]) && isFinite(p[1])) {
-                return [p[0], p[1]];
-            }
-        } catch (e2) {}
+    /* Map a point from a layer's own coordinate space — the space its
+     * children are positioned in — up into that layer's parent space. */
+    function pointToParentSpace(layer, point, t) {
+        var anchor = valueAt(layer, "anchorPoint", t, [0, 0, 0]);
+        var position = valueAt(layer, "position", t, [0, 0, 0]);
+        var scale = valueAt(layer, "scale", t, [100, 100, 100]);
+        var rotation = valueAt(layer, "rotation", t, 0);
+        var vx, vy, rad, cos, sin;
 
-        try {
-            p = layer.position.value;
-            return [p[0], p[1]];
-        } catch (e3) {}
+        vx = (point[0] - anchor[0]) * (scale[0] / 100);
+        vy = (point[1] - anchor[1]) * (scale[1] / 100);
 
-        return [0, 0];
+        rad = (typeof rotation === "number" ? rotation : 0) * Math.PI / 180;
+        cos = Math.cos(rad);
+        sin = Math.sin(rad);
+
+        return [
+            position[0] + vx * cos - vy * sin,
+            position[1] + vx * sin + vy * cos
+        ];
     }
 
     function orderLayers(layers, comp) {

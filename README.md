@@ -64,9 +64,16 @@ travels, first stop at the tail. Clicking one writes its angle into the field
 beside it, so `→` shows `0` and `↑` shows `90`. The tiles are shortcuts, not a
 cage: type any angle and the ramp follows it with no tile lit.
 
-Spatial order uses each layer's comp-space anchor point, so parented and 3D
-layers sort where they actually appear. Layers that project to the same point
-fall back to stacking order, which keeps the result stable and repeatable.
+Spatial order uses each layer's position **in comp space**, not its raw
+position. Those differ the moment a layer is parented: `layer.position` is
+measured relative to its parent, so ordering by it sorts a parented grid
+scrambled. Expressions solve this with `toWorld()`, which scripting does not
+provide, so Spectrum composes the parent chain itself — exact for translation,
+scale and Z rotation at any depth of parenting. A parent rotated out of plane
+in 3D sorts approximately.
+
+Layers that land on the same point fall back to stacking order, which keeps the
+result stable and repeatable.
 
 ### Targets
 

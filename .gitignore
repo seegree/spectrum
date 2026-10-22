@@ -1,2 +1,5 @@
 .DS_Store
 .claude/settings.local.json
+
+# probe output, regenerated on each run
+tools/ae-probe-results.txt

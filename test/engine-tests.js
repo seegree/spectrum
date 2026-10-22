@@ -98,6 +98,15 @@ var SPECTRUM_ENGINE_TEST = (function () {
         return null;
     };
 
+    /* A transform property as the engine reads it: valueAtTime first,
+     * .value as the fallback. */
+    function transformProp(value) {
+        return {
+            value: value,
+            valueAtTime: function () { return value; }
+        };
+    }
+
     function colorProp(matchName, opts) {
         opts = opts || {};
         opts.colorType = true;
@@ -135,15 +144,17 @@ var SPECTRUM_ENGINE_TEST = (function () {
             name: opts.name || ("Shape " + index),
             fillColor: fillColor,
             strokeColor: strokeColor,
-            position: { value: opts.position || [0, 0] },
-            anchorPoint: { value: [0, 0] },
+            parent: opts.parent || null,
+            position: transformProp(opts.position || [0, 0]),
+            anchorPoint: transformProp(opts.anchorPoint || [0, 0]),
+            scale: transformProp(opts.scale || [100, 100, 100]),
+            rotation: transformProp(
+                opts.rotation === undefined ? 0 : opts.rotation
+            ),
             property: function (key) {
                 if (key === "ADBE Root Vectors Group") { return root; }
                 if (key === "ADBE Effect Parade") { return this.effects; }
                 return null;
-            },
-            sourcePointToComp: function () {
-                return opts.position || [0, 0];
             }
         };
 
@@ -172,14 +183,16 @@ var SPECTRUM_ENGINE_TEST = (function () {
         return {
             index: index,
             name: "Null " + index,
-            position: { value: position || [0, 0] },
-            anchorPoint: { value: [0, 0] },
+            parent: null,
+            position: transformProp(position || [0, 0]),
+            anchorPoint: transformProp([0, 0]),
+            scale: transformProp([100, 100, 100]),
+            rotation: transformProp(0),
             effects: effects,
             property: function (key) {
                 if (key === "ADBE Effect Parade") { return effects; }
                 return null;
-            },
-            sourcePointToComp: function () { return position || [0, 0]; }
+            }
         };
     }
 
@@ -520,6 +533,104 @@ var SPECTRUM_ENGINE_TEST = (function () {
         state.angle = 37;
         ok("an off-tile angle reads in degrees",
             E.orderLabel().indexOf("37") !== -1, E.orderLabel());
+    })();
+
+    /* --- Parenting: the case that broke in After Effects ------------- */
+
+    (function () {
+        reset();
+
+        /* Unparented: comp position is just the layer position. */
+        var plain = shapeLayer(1, { position: [300, 200] });
+        var at = E.compAnchor(plain, comp);
+        ok("unparented layer sits at its own position",
+            at[0] === 300 && at[1] === 200, at.join(","));
+
+        /* Parented: layer.position is measured in the PARENT's space, so
+         * the comp position is the sum. Reading position raw — which the
+         * old code fell back to — would report 40,30 and sort wrong. */
+        var parent = nullLayer(9, [500, 400]);
+        var child = shapeLayer(2, { position: [40, 30], parent: parent });
+        at = E.compAnchor(child, comp);
+        ok("parented layer resolves to comp space",
+            at[0] === 540 && at[1] === 430,
+            at.join(",") + " (raw position would be 40,30)");
+
+        /* Two levels up. */
+        var grandparent = nullLayer(8, [1000, 1000]);
+        parent.parent = grandparent;
+        at = E.compAnchor(child, comp);
+        ok("a two-level parent chain composes",
+            at[0] === 1540 && at[1] === 1430, at.join(","));
+        parent.parent = null;
+    })();
+
+    (function () {
+        reset();
+        /* A parent scaled 200% doubles the child's offset. */
+        var parent = nullLayer(9, [100, 100]);
+        parent.scale = transformProp([200, 200, 200]);
+        var child = shapeLayer(2, { position: [50, 25], parent: parent });
+        var at = E.compAnchor(child, comp);
+        ok("a scaled parent scales the child's offset",
+            at[0] === 200 && at[1] === 150, at.join(","));
+    })();
+
+    (function () {
+        reset();
+        /* A parent rotated 90 degrees sends +x to +y on screen. */
+        var parent = nullLayer(9, [0, 0]);
+        parent.rotation = transformProp(90);
+        var child = shapeLayer(2, { position: [100, 0], parent: parent });
+        var at = E.compAnchor(child, comp);
+        ok("a rotated parent rotates the child's offset",
+            Math.abs(at[0] - 0) < 1e-9 && Math.abs(at[1] - 100) < 1e-9,
+            at.join(","));
+    })();
+
+    (function () {
+        reset();
+        /* A parent's anchor point offsets its children's space. */
+        var parent = nullLayer(9, [100, 100]);
+        parent.anchorPoint = transformProp([50, 50]);
+        var child = shapeLayer(2, { position: [50, 50], parent: parent });
+        var at = E.compAnchor(child, comp);
+        ok("a parent's anchor point shifts its children",
+            at[0] === 100 && at[1] === 100, at.join(","));
+    })();
+
+    (function () {
+        reset();
+        state.orderMode = "spatial";
+        state.angle = 0;
+
+        /* The real regression: three layers whose raw positions sort one
+         * way and whose comp positions sort the opposite way. */
+        var farRight = nullLayer(7, [900, 0]);
+        var a = shapeLayer(1, { position: [10, 0], parent: farRight });  /* comp 910 */
+        var b = shapeLayer(2, { position: [500, 0] });                   /* comp 500 */
+        var c = shapeLayer(3, { position: [100, 0] });                   /* comp 100 */
+
+        var out = E.orderLayers([a, b, c], comp);
+        ok("0 deg sorts by comp position, not raw position",
+            out[0].index === 3 && out[1].index === 2 && out[2].index === 1,
+            "got " + out[0].index + "," + out[1].index + "," + out[2].index +
+            " (raw position would give 1,3,2)");
+    })();
+
+    (function () {
+        reset();
+        /* A cycle cannot happen in AE, but never loop on project data
+         * without a bound. */
+        var x = nullLayer(1, [10, 10]);
+        var y = nullLayer(2, [20, 20]);
+        x.parent = y;
+        y.parent = x;
+        var finished = false;
+        var at = E.compAnchor(x, comp);
+        finished = true;
+        ok("a parent cycle terminates instead of hanging",
+            finished && isFinite(at[0]) && isFinite(at[1]), at.join(","));
     })();
 
     /* --- Report ---------------------------------------------------------- */

@@ -61,6 +61,49 @@
         }
     }
 
+    /* Same comp-space maths the panel uses: layer.position is measured in
+     * the PARENT's space, so a parented layer must be walked up the chain.
+     * Expressions would use toWorld(); scripting has no equivalent. */
+    function valueAt(layer, name, t, fallback) {
+        var prop = null, v;
+        try { prop = layer[name]; } catch (missing) { return fallback; }
+        if (!prop) { return fallback; }
+        try {
+            v = prop.valueAtTime(t, false);
+        } catch (timeError) {
+            try { v = prop.value; } catch (valueError) { return fallback; }
+        }
+        return (v === undefined || v === null) ? fallback : v;
+    }
+
+    function pointToParentSpace(layer, point, t) {
+        var anchor = valueAt(layer, "anchorPoint", t, [0, 0, 0]);
+        var position = valueAt(layer, "position", t, [0, 0, 0]);
+        var scale = valueAt(layer, "scale", t, [100, 100, 100]);
+        var rotation = valueAt(layer, "rotation", t, 0);
+        var vx = (point[0] - anchor[0]) * (scale[0] / 100);
+        var vy = (point[1] - anchor[1]) * (scale[1] / 100);
+        var rad = (typeof rotation === "number" ? rotation : 0) * Math.PI / 180;
+        var cos = Math.cos(rad), sin = Math.sin(rad);
+        return [
+            position[0] + vx * cos - vy * sin,
+            position[1] + vx * sin + vy * cos
+        ];
+    }
+
+    function compAnchor(layer, comp) {
+        var t = 0, p, parent = null, guard = 0;
+        try { t = comp.time; } catch (timeError) { t = 0; }
+        p = valueAt(layer, "position", t, [0, 0, 0]);
+        try { parent = layer.parent; } catch (parentError) { parent = null; }
+        while (parent && guard < 32) {
+            p = pointToParentSpace(parent, p, t);
+            try { parent = parent.parent; } catch (walkError) { parent = null; }
+            guard++;
+        }
+        return [p[0], p[1]];
+    }
+
     var comp = app.project ? app.project.activeItem : null;
     if (!(comp && comp instanceof CompItem)) {
         alert("Open a composition first.");
@@ -77,6 +120,7 @@
     var uniqueFills = {}, uniqueFillCount = 0;
     var uniquePoints = {}, uniquePointCount = 0;
     var totalRepeaters = 0, totalGradients = 0, totalEffects = 0;
+    var parentedCount = 0;
     var i, layer, found, pt, ptKey, anchor, fx, method;
 
     lines.push("Spectrum diagnostic");
@@ -98,20 +142,10 @@
 
         try { anchor = layer.anchorPoint.value; } catch (e) { anchor = [0, 0]; }
 
-        pt = null;
-        method = "";
-        try {
-            pt = layer.sourcePointToComp(anchor);
-            method = "1-arg";
-        } catch (e1) {
-            try {
-                pt = layer.sourcePointToComp(comp.time, anchor);
-                method = "2-arg";
-            } catch (e2) {
-                try { pt = layer.position.value; method = "position"; }
-                catch (e3) { pt = [0, 0]; method = "failed"; }
-            }
-        }
+        pt = compAnchor(layer, comp);
+        method = (layer.parent ? "parent chain" : "direct");
+
+        try { if (layer.parent) { parentedCount++; } } catch (pe) {}
 
         ptKey = Math.round(pt[0] * 100) / 100 + "," + Math.round(pt[1] * 100) / 100;
         if (!uniquePoints[ptKey]) { uniquePoints[ptKey] = 1; uniquePointCount++; }
@@ -151,7 +185,7 @@
     verdict.push("Layers selected:        " + sel.length);
     verdict.push("Distinct fill colors:   " + uniqueFillCount);
     verdict.push("Distinct comp anchors:  " + uniquePointCount);
-    verdict.push("Anchor method used:     " + method);
+    verdict.push("Parented layers:        " + parentedCount);
     verdict.push("Layers with effects:    " + totalEffects);
     verdict.push("Gradient fills found:   " + totalGradients);
     verdict.push("Repeaters found:        " + totalRepeaters);
