@@ -41,7 +41,7 @@ button (a preset dropdown next to Apply) is a command input, not a
 state readout — don't persist its last value across sessions. A
 remembered command poses as "the current state" and will eventually
 lie, because the real state (colors, sliders) persists on its own and
-drifts. (FlowDiagram: the panel reopened showing "Simulink Classic"
+drifts. (FlowDiagram: the panel reopened showing a "Classic" preset
 beside a Gradient of 0 — two memories, one implied lie.)
 
 **Structure must earn its ink.** Category headings only where rows
